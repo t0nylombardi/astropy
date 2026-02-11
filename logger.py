@@ -2,6 +2,7 @@ import inspect
 import json
 import math
 from datetime import datetime
+from typing import Any
 
 __all__ = ["log_state", "log_event"]
 
@@ -15,7 +16,8 @@ _event_log_initialized = False
 _start_time = datetime.now()
 
 
-def log_state():
+def log_state() -> None:
+    """Write a periodic snapshot of caller-local game state to `game_state.jsonl`."""
     global _frame_count, _state_log_initialized
 
     # Stop logging after `_MAX_SECONDS` seconds
@@ -115,7 +117,8 @@ def log_state():
     _state_log_initialized = True
 
 
-def log_event(event_type, **details):
+def log_event(event_type: str, **details: Any) -> None:
+    """Append a timestamped game event entry to `game_events.jsonl`."""
     global _event_log_initialized
 
     now = datetime.now()
