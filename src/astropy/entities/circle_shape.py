@@ -9,6 +9,7 @@ import pygame
 class CircleShape(pygame.sprite.Sprite):
     """Base class for circular sprites with position, velocity, and radius."""
 
+    LINE_WIDTH: int = 2
     position: pygame.Vector2
     velocity: pygame.Vector2
     radius: float

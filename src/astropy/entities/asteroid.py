@@ -1,7 +1,6 @@
 import pygame
 
-from circleshape import CircleShape
-from constants import LINE_WIDTH
+from astropy.entities.circle_shape import CircleShape
 
 
 class Asteroid(CircleShape):
@@ -19,7 +18,7 @@ class Asteroid(CircleShape):
             "white",
             self.position,
             self.radius,
-            LINE_WIDTH,
+            self.LINE_WIDTH,
         )
 
     def update(self, dt: float) -> None:

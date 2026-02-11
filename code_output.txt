@@ -1,0 +1,470 @@
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/core/__init__.py ===
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/core/config.py ===
+class Config:
+    """Sets Configeration contants."""
+
+    SCREEN_WIDTH: int = 1280
+    SCREEN_HEIGHT: int = 720
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/core/game.py ===
+from typing import Any
+
+import pygame
+
+from astropy.core.config import Config
+from astropy.entities.asteroid import Asteroid
+from astropy.entities.asteroid_field import AsteroidField
+from astropy.entities.circle_shape import CircleShape
+from astropy.entities.player import Player
+from astropy.logger import log_event, log_state
+
+
+class Game:
+    """Manage the initialization, main loop, and shutdown of the Astropy game."""
+
+    FPS = 60
+
+    def __init__(self) -> None:
+        """Initialize pygame, the display surface, and all entity groups."""
+        pygame.init()
+
+        self.screen = pygame.display.set_mode((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
+        self.clock = pygame.time.Clock()
+
+        self._setup_groups()
+        self._register_entity_containers()
+        self._create_entities()
+
+    def _setup_groups(self) -> None:
+        self.updatable: pygame.sprite.Group[Any] = pygame.sprite.Group()
+        self.drawable: pygame.sprite.Group[Any] = pygame.sprite.Group()
+        self.asteroids: pygame.sprite.Group[Any] = pygame.sprite.Group()
+
+    def _register_entity_containers(self) -> None:
+        Player.containers = (self.updatable, self.drawable)
+
+        Asteroid.containers = (
+            self.asteroids,
+            self.updatable,
+            self.drawable,
+        )
+
+        AsteroidField.containers = (self.updatable,)
+
+    def _create_entities(self) -> None:
+        self.player = Player(
+            Config.SCREEN_WIDTH / 2,
+            Config.SCREEN_HEIGHT / 2,
+        )
+
+        AsteroidField(
+            Config.SCREEN_WIDTH,
+            Config.SCREEN_HEIGHT,
+        )
+
+    def run(self) -> None:
+        """Run _process_events while the game is active."""
+        while self._process_events():
+            dt = self.clock.tick(self.FPS) / 1000.0
+
+            log_state()
+            self._update(dt)
+            self._render()
+
+        pygame.quit()
+
+    def _process_events(self) -> bool:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return False
+
+        return True
+
+    def _update(self, dt: float) -> None:
+        self.updatable.update(dt)
+
+        if any(asteroid.collides_with(self.player) for asteroid in self.asteroids):
+            log_event("player_hit")
+            print("Game over!")
+            # sys.exit()
+
+    def _render(self) -> None:
+        self.screen.fill((0, 0, 0))
+
+        for sprite in self.drawable:
+            if isinstance(sprite, CircleShape):
+                sprite.draw(self.screen)
+
+        pygame.display.flip()
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/__init__.py ===
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/asteroid.py ===
+import pygame
+
+from astropy.entities.circle_shape import CircleShape
+
+
+class Asteroid(CircleShape):
+    """A moving asteroid represented as a circular game object."""
+
+    def __init__(self, x: float, y: float, radius: int) -> None:
+        """Initialize an asteroid at `(x, y)` with a given collision radius."""
+        super().__init__(x, y, radius)
+        # Do NOT reassign position, radius, or velocity
+
+    def draw(self, screen: pygame.Surface) -> None:
+        """Render the asteroid as a white outlined circle."""
+        pygame.draw.circle(
+            screen,
+            "white",
+            self.position,
+            self.radius,
+            self.LINE_WIDTH,
+        )
+
+    def update(self, dt: float) -> None:
+        """Advance asteroid position according to velocity and delta time."""
+        self.position += self.velocity * dt
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/asteroid_field.py ===
+import random
+from collections.abc import Callable
+from typing import Any, ClassVar
+
+import pygame
+from pygame.math import Vector2
+
+from astropy.entities.asteroid import Asteroid
+
+type EdgeFactory = Callable[[float], Vector2]
+type Edge = tuple[Vector2, EdgeFactory]
+
+
+class AsteroidField(pygame.sprite.Sprite):
+    """Spawner that periodically creates asteroids at random screen edges."""
+
+    # Domain constants (cohesive to this class)
+    ASTEROID_KINDS: ClassVar[int] = 3
+    ASTEROID_SPAWN_RATE_SECONDS: ClassVar[float] = 1.5
+    ASTEROID_MIN_RADIUS: ClassVar[int] = 20
+    ASTEROID_MAX_RADIUS: ClassVar[int] = ASTEROID_MIN_RADIUS * ASTEROID_KINDS
+
+    containers: ClassVar[tuple[pygame.sprite.AbstractGroup[Any], ...]] = ()
+
+    def __init__(self, screen_width: float, screen_height: float) -> None:
+        """Create an Ateroid fieldn."""
+        super().__init__(*self.containers)
+
+        self._screen_width = screen_width
+        self._screen_height = screen_height
+        self._spawn_timer: float = 0.0
+
+        self._edges: tuple[Edge, ...] = (
+            (Vector2(1, 0), self._left_edge_spawn),
+            (Vector2(-1, 0), self._right_edge_spawn),
+            (Vector2(0, 1), self._top_edge_spawn),
+            (Vector2(0, -1), self._bottom_edge_spawn),
+        )
+
+    def _left_edge_spawn(self, y: float) -> Vector2:
+        return Vector2(-self.ASTEROID_MAX_RADIUS, y * self._screen_height)
+
+    def _right_edge_spawn(self, y: float) -> Vector2:
+        return Vector2(self._screen_width + self.ASTEROID_MAX_RADIUS, y * self._screen_height)
+
+    def _top_edge_spawn(self, x: float) -> Vector2:
+        return Vector2(x * self._screen_width, -self.ASTEROID_MAX_RADIUS)
+
+    def _bottom_edge_spawn(self, x: float) -> Vector2:
+        return Vector2(x * self._screen_width, self._screen_height + self.ASTEROID_MAX_RADIUS)
+
+    def _spawn(self, radius: int, position: Vector2, velocity: Vector2) -> None:
+        asteroid = Asteroid(position.x, position.y, radius)
+        asteroid.velocity = velocity
+
+    def update(self, dt: float) -> None:
+        """Spawn a new asteroids at a random."""
+        self._spawn_timer += dt
+
+        if self._spawn_timer < self.ASTEROID_SPAWN_RATE_SECONDS:
+            return
+
+        self._spawn_timer -= self.ASTEROID_SPAWN_RATE_SECONDS
+
+        edge = random.choice(self._edges)
+        speed = random.randint(40, 100)
+        velocity = edge[0] * speed
+        velocity = velocity.rotate(random.randint(-30, 30))
+        position = edge[1](random.uniform(0, 1))
+        kind = random.randint(1, self.ASTEROID_KINDS)
+        self._spawn(self.ASTEROID_MIN_RADIUS * kind, position, velocity)
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/circle_shape.py ===
+from __future__ import annotations
+
+from typing import Any, ClassVar
+
+import pygame
+
+
+# Base class for game objects
+class CircleShape(pygame.sprite.Sprite):
+    """Base class for circular sprites with position, velocity, and radius."""
+
+    LINE_WIDTH: int = 2
+    position: pygame.Vector2
+    velocity: pygame.Vector2
+    radius: float
+    containers: ClassVar[tuple[pygame.sprite.AbstractGroup[Any], ...]] = ()
+
+    def __init__(self, x: float, y: float, radius: int) -> None:
+        """Initialize sprite state for a circular game object."""
+        super().__init__(*self.containers)
+
+        self.position = pygame.Vector2(x, y)
+        self.velocity = pygame.Vector2(0, 0)
+        self.radius = radius
+
+    def draw(self, screen: pygame.Surface) -> None:
+        """Draw the sprite to the given screen surface."""
+        # must override
+        pass
+
+    def collides_with(self, other: CircleShape) -> bool:
+        """Return whether this circle overlaps another circle."""
+        return self.position.distance_to(other.position) < (self.radius + other.radius)
+
+    def update(self, dt: float) -> None:
+        """Update sprite state using the elapsed delta time."""
+        # must override
+        pass
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/player.py ===
+from typing import ClassVar
+
+import pygame
+
+from src.astropy.entities.circle_shape import CircleShape
+
+
+class Player(CircleShape):
+    """Player-controlled ship represented as a rotating triangle."""
+
+    PLAYER_RADIUS: ClassVar[int] = 20
+    PLAYER_TURN_SPEED: ClassVar[int] = 300
+    PLAYER_SPEED: ClassVar[int] = 200
+
+    def __init__(self, x: float, y: float) -> None:
+        """Create a player ship at `(x, y)` with the default facing direction."""
+        super().__init__(x, y, self.PLAYER_RADIUS)
+        self.rotation: float = 180
+
+    def triangle(self):
+        """Return the three vertices that define the ship polygon."""
+        forward = pygame.Vector2(0, 1).rotate(self.rotation)
+        right = pygame.Vector2(0, 1).rotate(self.rotation + 90) * self.radius / 1.5
+
+        a = self.position + forward * self.radius
+        b = self.position - forward * self.radius - right
+        c = self.position - forward * self.radius + right
+        return [a, b, c]
+
+    def draw(self, screen: pygame.Surface):
+        """Draw the ship as an outlined triangle."""
+        pygame.draw.polygon(screen, "white", self.triangle(), self.LINE_WIDTH)
+
+    def rotate(self, dt: float):
+        """Rotate the ship based on elapsed time and turn speed."""
+        self.rotation += int(self.PLAYER_TURN_SPEED * dt)
+
+    def move(self, dt: float) -> None:
+        """Move the ship forward or backward along its current heading."""
+        unit_vector = pygame.Vector2(0, 1)
+
+        rotated_vector = unit_vector.rotate(self.rotation)
+        rotated_with_speed_vector = rotated_vector * self.PLAYER_SPEED * dt
+
+        self.position += rotated_with_speed_vector
+
+    def update(self, dt: float) -> None:
+        """Read movement keys and apply rotation and translation updates."""
+        keys = pygame.key.get_pressed()
+
+        if keys[pygame.K_a]:
+            self.rotate(-dt)
+        if keys[pygame.K_d]:
+            self.rotate(dt)
+        if keys[pygame.K_w]:
+            self.move(dt)
+        if keys[pygame.K_s]:
+            self.move(-dt)
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/logger.py ===
+import inspect
+import json
+import math
+from datetime import datetime
+from typing import Any
+
+__all__ = ["log_state", "log_event"]
+
+_FPS = 60
+_MAX_SECONDS = 16
+_SPRITE_SAMPLE_LIMIT = 10  # Maximum number of sprites to log per group
+
+_frame_count = 0
+_state_log_initialized = False
+_event_log_initialized = False
+_start_time = datetime.now()
+
+
+def log_state() -> None:
+    """Write a periodic snapshot of caller-local game state to `game_state.jsonl`."""
+    global _frame_count, _state_log_initialized
+
+    # Stop logging after `_MAX_SECONDS` seconds
+    if _frame_count > _FPS * _MAX_SECONDS:
+        return
+
+    # Take a snapshot approx. once per second
+    _frame_count += 1
+    if _frame_count % _FPS != 0:
+        return
+
+    now = datetime.now()
+
+    frame = inspect.currentframe()
+    if frame is None:
+        return
+
+    frame_back = frame.f_back
+    if frame_back is None:
+        return
+
+    local_vars = frame_back.f_locals.copy()
+
+    screen_size = []
+    game_state = {}
+
+    for key, value in local_vars.items():
+        if "pygame" in str(type(value)) and hasattr(value, "get_size"):
+            screen_size = value.get_size()
+
+        if hasattr(value, "__class__") and "Group" in value.__class__.__name__:
+            sprites_data = []
+
+            for i, sprite in enumerate(value):
+                if i >= _SPRITE_SAMPLE_LIMIT:
+                    break
+
+                sprite_info = {"type": sprite.__class__.__name__}
+
+                if hasattr(sprite, "position"):
+                    sprite_info["pos"] = [
+                        round(sprite.position.x, 2),
+                        round(sprite.position.y, 2),
+                    ]
+
+                if hasattr(sprite, "velocity"):
+                    sprite_info["vel"] = [
+                        round(sprite.velocity.x, 2),
+                        round(sprite.velocity.y, 2),
+                    ]
+
+                if hasattr(sprite, "radius"):
+                    sprite_info["rad"] = sprite.radius
+
+                if hasattr(sprite, "rotation"):
+                    sprite_info["rot"] = round(sprite.rotation, 2)
+
+                sprites_data.append(sprite_info)
+
+            game_state[key] = {"count": len(value), "sprites": sprites_data}
+
+        if len(game_state) == 0 and hasattr(value, "position"):
+            sprite_info = {"type": value.__class__.__name__}
+
+            sprite_info["pos"] = [
+                round(value.position.x, 2),
+                round(value.position.y, 2),
+            ]
+
+            if hasattr(value, "velocity"):
+                sprite_info["vel"] = [
+                    round(value.velocity.x, 2),
+                    round(value.velocity.y, 2),
+                ]
+
+            if hasattr(value, "radius"):
+                sprite_info["rad"] = value.radius
+
+            if hasattr(value, "rotation"):
+                sprite_info["rot"] = round(value.rotation, 2)
+
+            game_state[key] = sprite_info
+
+    entry = {
+        "timestamp": now.strftime("%H:%M:%S.%f")[:-3],
+        "elapsed_s": math.floor((now - _start_time).total_seconds()),
+        "frame": _frame_count,
+        "screen_size": screen_size,
+        **game_state,
+    }
+
+    # New log file on each run
+    mode = "w" if not _state_log_initialized else "a"
+    with open("game_state.jsonl", mode) as f:
+        f.write(json.dumps(entry) + "\n")
+
+    _state_log_initialized = True
+
+
+def log_event(event_type: str, **details: Any) -> None:
+    """Append a timestamped game event entry to `game_events.jsonl`."""
+    global _event_log_initialized
+
+    now = datetime.now()
+
+    event = {
+        "timestamp": now.strftime("%H:%M:%S.%f")[:-3],
+        "elapsed_s": math.floor((now - _start_time).total_seconds()),
+        "frame": _frame_count,
+        "type": event_type,
+        **details,
+    }
+
+    mode = "w" if not _event_log_initialized else "a"
+    with open("game_events.jsonl", mode) as f:
+        f.write(json.dumps(event) + "\n")
+
+    _event_log_initialized = True
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/main.py ===
+from astropy.core.game import Game
+
+
+def main() -> None:
+    """Run the game loop entry point."""
+    Game().run()
+
+
+if __name__ == "__main__":
+    main()
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/systems/__init__.py ===
+

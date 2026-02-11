@@ -6,8 +6,12 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
 .venv
 .ccignore
+.ruff_cache
+.uv-cache
+
+.ruff.toml
+
 game_state.jsonl
 game_events.jsonl

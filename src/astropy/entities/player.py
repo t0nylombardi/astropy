@@ -1,15 +1,20 @@
+from typing import ClassVar
+
 import pygame
 
-from circleshape import CircleShape
-from constants import LINE_WIDTH, PLAYER_RADIUS, PLAYER_SPEED, PLAYER_TURN_SPEED
+from astropy.entities.circle_shape import CircleShape
 
 
 class Player(CircleShape):
     """Player-controlled ship represented as a rotating triangle."""
 
+    PLAYER_RADIUS: ClassVar[int] = 20
+    PLAYER_TURN_SPEED: ClassVar[int] = 300
+    PLAYER_SPEED: ClassVar[int] = 200
+
     def __init__(self, x: float, y: float) -> None:
         """Create a player ship at `(x, y)` with the default facing direction."""
-        super().__init__(x, y, PLAYER_RADIUS)
+        super().__init__(x, y, self.PLAYER_RADIUS)
         self.rotation: float = 180
 
     def triangle(self):
@@ -24,18 +29,18 @@ class Player(CircleShape):
 
     def draw(self, screen: pygame.Surface):
         """Draw the ship as an outlined triangle."""
-        pygame.draw.polygon(screen, "white", self.triangle(), LINE_WIDTH)
+        pygame.draw.polygon(screen, "white", self.triangle(), self.LINE_WIDTH)
 
     def rotate(self, dt: float):
         """Rotate the ship based on elapsed time and turn speed."""
-        self.rotation += int(PLAYER_TURN_SPEED * dt)
+        self.rotation += int(self.PLAYER_TURN_SPEED * dt)
 
     def move(self, dt: float) -> None:
         """Move the ship forward or backward along its current heading."""
         unit_vector = pygame.Vector2(0, 1)
 
         rotated_vector = unit_vector.rotate(self.rotation)
-        rotated_with_speed_vector = rotated_vector * PLAYER_SPEED * dt
+        rotated_with_speed_vector = rotated_vector * self.PLAYER_SPEED * dt
 
         self.position += rotated_with_speed_vector
 
