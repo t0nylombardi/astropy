@@ -10,6 +10,7 @@ class Config:
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/core/game.py ===
+import sys
 from typing import Any
 
 import pygame
@@ -17,8 +18,9 @@ import pygame
 from astropy.core.config import Config
 from astropy.entities.asteroid import Asteroid
 from astropy.entities.asteroid_field import AsteroidField
-from astropy.entities.circle_shape import CircleShape
+from astropy.entities.circle_shape import PhysicsBody
 from astropy.entities.player import Player
+from astropy.entities.shot import Shot
 from astropy.logger import log_event, log_state
 
 
@@ -42,6 +44,7 @@ class Game:
         self.updatable: pygame.sprite.Group[Any] = pygame.sprite.Group()
         self.drawable: pygame.sprite.Group[Any] = pygame.sprite.Group()
         self.asteroids: pygame.sprite.Group[Any] = pygame.sprite.Group()
+        self.shots: pygame.sprite.Group[Any] = pygame.sprite.Group()
 
     def _register_entity_containers(self) -> None:
         Player.containers = (self.updatable, self.drawable)
@@ -53,6 +56,7 @@ class Game:
         )
 
         AsteroidField.containers = (self.updatable,)
+        Shot.containers = (self.drawable, self.updatable)
 
     def _create_entities(self) -> None:
         self.player = Player(
@@ -92,13 +96,13 @@ class Game:
         if any(asteroid.collides_with(self.player) for asteroid in self.asteroids):
             log_event("player_hit")
             print("Game over!")
-            # sys.exit()
+            sys.exit()
 
     def _render(self) -> None:
         self.screen.fill((0, 0, 0))
 
         for sprite in self.drawable:
-            if isinstance(sprite, CircleShape):
+            if isinstance(sprite, PhysicsBody):
                 sprite.draw(self.screen)
 
         pygame.display.flip()
@@ -110,16 +114,15 @@ class Game:
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/asteroid.py ===
 import pygame
 
-from astropy.entities.circle_shape import CircleShape
+from astropy.entities.circle_shape import PhysicsBody
 
 
-class Asteroid(CircleShape):
+class Asteroid(PhysicsBody):
     """A moving asteroid represented as a circular game object."""
 
     def __init__(self, x: float, y: float, radius: int) -> None:
         """Initialize an asteroid at `(x, y)` with a given collision radius."""
         super().__init__(x, y, radius)
-        # Do NOT reassign position, radius, or velocity
 
     def draw(self, screen: pygame.Surface) -> None:
         """Render the asteroid as a white outlined circle."""
@@ -213,42 +216,39 @@ class AsteroidField(pygame.sprite.Sprite):
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/circle_shape.py ===
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
 import pygame
 
 
 # Base class for game objects
-class CircleShape(pygame.sprite.Sprite):
+class PhysicsBody(pygame.sprite.Sprite, ABC):
     """Base class for circular sprites with position, velocity, and radius."""
 
     LINE_WIDTH: int = 2
-    position: pygame.Vector2
-    velocity: pygame.Vector2
-    radius: float
     containers: ClassVar[tuple[pygame.sprite.AbstractGroup[Any], ...]] = ()
 
-    def __init__(self, x: float, y: float, radius: int) -> None:
-        """Initialize sprite state for a circular game object."""
+    def __init__(self, x: float, y: float, radius: int) -> None:  # noqa: D107
         super().__init__(*self.containers)
 
-        self.position = pygame.Vector2(x, y)
-        self.velocity = pygame.Vector2(0, 0)
-        self.radius = radius
+        self.position: pygame.Vector2 = pygame.Vector2(x, y)
+        self.velocity: pygame.Vector2 = pygame.Vector2(0, 0)
+        self.radius: float = radius
 
+    @abstractmethod
     def draw(self, screen: pygame.Surface) -> None:
         """Draw the sprite to the given screen surface."""
-        # must override
         pass
 
-    def collides_with(self, other: CircleShape) -> bool:
-        """Return whether this circle overlaps another circle."""
-        return self.position.distance_to(other.position) < (self.radius + other.radius)
-
+    @abstractmethod
     def update(self, dt: float) -> None:
         """Update sprite state using the elapsed delta time."""
-        # must override
         pass
+
+    def collides_with(self, other: PhysicsBody) -> bool:
+        """Return whether this circle overlaps another circle."""
+        return self.position.distance_to(other.position) < (self.radius + other.radius)
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/player.py ===
@@ -256,15 +256,17 @@ from typing import ClassVar
 
 import pygame
 
-from src.astropy.entities.circle_shape import CircleShape
+from astropy.entities.circle_shape import PhysicsBody
+from astropy.entities.shot import Shot
 
 
-class Player(CircleShape):
+class Player(PhysicsBody):
     """Player-controlled ship represented as a rotating triangle."""
 
     PLAYER_RADIUS: ClassVar[int] = 20
     PLAYER_TURN_SPEED: ClassVar[int] = 300
     PLAYER_SPEED: ClassVar[int] = 200
+    PLAYER_SHOOT_SPEED: ClassVar[int] = 500
 
     def __init__(self, x: float, y: float) -> None:
         """Create a player ship at `(x, y)` with the default facing direction."""
@@ -298,6 +300,13 @@ class Player(CircleShape):
 
         self.position += rotated_with_speed_vector
 
+    def shoot(self) -> None:
+        """Create a shot moving in the direction the player is facing."""
+        shot = Shot(self.position.x, self.position.y)
+
+        direction = pygame.Vector2(0, 1).rotate(self.rotation)
+        shot.velocity = direction * self.PLAYER_SHOOT_SPEED
+
     def update(self, dt: float) -> None:
         """Read movement keys and apply rotation and translation updates."""
         keys = pygame.key.get_pressed()
@@ -310,6 +319,40 @@ class Player(CircleShape):
             self.move(dt)
         if keys[pygame.K_s]:
             self.move(-dt)
+        if keys[pygame.K_SPACE]:
+            self.shoot()
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/shot.py ===
+from typing import ClassVar
+
+import pygame
+
+from astropy.entities.circle_shape import PhysicsBody
+
+
+class Shot(PhysicsBody):
+    """Create projectile objects for player to shoot with."""
+
+    SHOT_RADIUS: ClassVar[int] = 5
+
+    def __init__(self, x: float, y: float) -> None:
+        """Initialize shot object."""
+        super().__init__(x, y, self.SHOT_RADIUS)
+
+    def draw(self, screen: pygame.Surface) -> None:
+        """Render the shot as a white outlined circle."""
+        pygame.draw.circle(
+            screen,
+            "red",
+            self.position,
+            self.SHOT_RADIUS,
+            self.LINE_WIDTH,
+        )
+
+    def update(self, dt: float) -> None:
+        """Advance shotd position according to velocity and delta time."""
+        self.position += self.velocity * dt
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/logger.py ===
@@ -467,4 +510,3 @@ if __name__ == "__main__":
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/systems/__init__.py ===
-

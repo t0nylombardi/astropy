@@ -2,15 +2,17 @@ from typing import ClassVar
 
 import pygame
 
-from astropy.entities.circle_shape import CircleShape
+from astropy.entities.physics_body import PhysicsBody
+from astropy.entities.shot import Shot
 
 
-class Player(CircleShape):
+class Player(PhysicsBody):
     """Player-controlled ship represented as a rotating triangle."""
 
     PLAYER_RADIUS: ClassVar[int] = 20
     PLAYER_TURN_SPEED: ClassVar[int] = 300
     PLAYER_SPEED: ClassVar[int] = 200
+    PLAYER_SHOOT_SPEED: ClassVar[int] = 500
 
     def __init__(self, x: float, y: float) -> None:
         """Create a player ship at `(x, y)` with the default facing direction."""
@@ -44,6 +46,13 @@ class Player(CircleShape):
 
         self.position += rotated_with_speed_vector
 
+    def shoot(self) -> None:
+        """Create a shot moving in the direction the player is facing."""
+        shot = Shot(self.position.x, self.position.y)
+
+        direction = pygame.Vector2(0, 1).rotate(self.rotation)
+        shot.velocity = direction * self.PLAYER_SHOOT_SPEED
+
     def update(self, dt: float) -> None:
         """Read movement keys and apply rotation and translation updates."""
         keys = pygame.key.get_pressed()
@@ -56,3 +65,5 @@ class Player(CircleShape):
             self.move(dt)
         if keys[pygame.K_s]:
             self.move(-dt)
+        if keys[pygame.K_SPACE]:
+            self.shoot()

@@ -6,8 +6,9 @@ import pygame
 from astropy.core.config import Config
 from astropy.entities.asteroid import Asteroid
 from astropy.entities.asteroid_field import AsteroidField
-from astropy.entities.circle_shape import CircleShape
+from astropy.entities.physics_body import PhysicsBody
 from astropy.entities.player import Player
+from astropy.entities.shot import Shot
 from astropy.logger import log_event, log_state
 
 
@@ -31,6 +32,7 @@ class Game:
         self.updatable: pygame.sprite.Group[Any] = pygame.sprite.Group()
         self.drawable: pygame.sprite.Group[Any] = pygame.sprite.Group()
         self.asteroids: pygame.sprite.Group[Any] = pygame.sprite.Group()
+        self.shots: pygame.sprite.Group[Any] = pygame.sprite.Group()
 
     def _register_entity_containers(self) -> None:
         Player.containers = (self.updatable, self.drawable)
@@ -42,6 +44,7 @@ class Game:
         )
 
         AsteroidField.containers = (self.updatable,)
+        Shot.containers = (self.drawable, self.updatable)
 
     def _create_entities(self) -> None:
         self.player = Player(
@@ -87,7 +90,7 @@ class Game:
         self.screen.fill((0, 0, 0))
 
         for sprite in self.drawable:
-            if isinstance(sprite, CircleShape):
+            if isinstance(sprite, PhysicsBody):
                 sprite.draw(self.screen)
 
         pygame.display.flip()

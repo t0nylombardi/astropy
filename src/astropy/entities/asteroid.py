@@ -1,15 +1,14 @@
 import pygame
 
-from astropy.entities.circle_shape import CircleShape
+from astropy.entities.physics_body import PhysicsBody
 
 
-class Asteroid(CircleShape):
+class Asteroid(PhysicsBody):
     """A moving asteroid represented as a circular game object."""
 
     def __init__(self, x: float, y: float, radius: int) -> None:
         """Initialize an asteroid at `(x, y)` with a given collision radius."""
         super().__init__(x, y, radius)
-        # Do NOT reassign position, radius, or velocity
 
     def draw(self, screen: pygame.Surface) -> None:
         """Render the asteroid as a white outlined circle."""
