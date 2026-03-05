@@ -12,6 +12,7 @@ wheels/
 .uv-cache
 
 .ruff.toml
+.DS_Store
 
 game_state.jsonl
 game_events.jsonl

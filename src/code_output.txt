@@ -18,7 +18,7 @@ import pygame
 from astropy.core.config import Config
 from astropy.entities.asteroid import Asteroid
 from astropy.entities.asteroid_field import AsteroidField
-from astropy.entities.circle_shape import PhysicsBody
+from astropy.entities.physics_body import PhysicsBody
 from astropy.entities.player import Player
 from astropy.entities.shot import Shot
 from astropy.logger import log_event, log_state
@@ -114,7 +114,7 @@ class Game:
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/asteroid.py ===
 import pygame
 
-from astropy.entities.circle_shape import PhysicsBody
+from astropy.entities.physics_body import PhysicsBody
 
 
 class Asteroid(PhysicsBody):
@@ -213,7 +213,7 @@ class AsteroidField(pygame.sprite.Sprite):
         self._spawn(self.ASTEROID_MIN_RADIUS * kind, position, velocity)
 
 
-=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/circle_shape.py ===
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/physics_body.py ===
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -256,7 +256,7 @@ from typing import ClassVar
 
 import pygame
 
-from astropy.entities.circle_shape import PhysicsBody
+from astropy.entities.physics_body import PhysicsBody
 from astropy.entities.shot import Shot
 
 
@@ -328,7 +328,7 @@ from typing import ClassVar
 
 import pygame
 
-from astropy.entities.circle_shape import PhysicsBody
+from astropy.entities.physics_body import PhysicsBody
 
 
 class Shot(PhysicsBody):
@@ -510,3 +510,4 @@ if __name__ == "__main__":
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/systems/__init__.py ===
+

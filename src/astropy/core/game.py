@@ -44,7 +44,7 @@ class Game:
         )
 
         AsteroidField.containers = (self.updatable,)
-        Shot.containers = (self.drawable, self.updatable)
+        Shot.containers = (self.shots, self.drawable, self.updatable)
 
     def _create_entities(self) -> None:
         self.player = Player(
@@ -62,7 +62,15 @@ class Game:
         while self._process_events():
             dt = self.clock.tick(self.FPS) / 1000.0
 
+            # expose attributes as locals so log_state can see them
+            updatable = self.updatable
+            drawable = self.drawable
+            asteroids = self.asteroids
+            shots = self.shots
+            screen = self.screen
+
             log_state()
+
             self._update(dt)
             self._render()
 
