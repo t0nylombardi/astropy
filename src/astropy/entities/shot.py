@@ -18,7 +18,7 @@ class Shot(PhysicsBody):
         """Render the shot as a white outlined circle."""
         pygame.draw.circle(
             screen,
-            "red",
+            "green",
             self.position,
             self.SHOT_RADIUS,
             self.LINE_WIDTH,

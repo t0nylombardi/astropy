@@ -62,19 +62,27 @@ class Game:
         while self._process_events():
             dt = self.clock.tick(self.FPS) / 1000.0
 
-            # expose attributes as locals so log_state can see them
-            updatable = self.updatable
-            drawable = self.drawable
-            asteroids = self.asteroids
-            shots = self.shots
-            screen = self.screen
-
-            log_state()
+            _updatable = self.updatable
+            _drawable = self.drawable
+            _asteroids = self.asteroids
+            _shots = self.shots
+            _screen = self.screen
 
             self._update(dt)
+            self._log_state()
             self._render()
 
         pygame.quit()
+
+    def _log_state(self) -> None:
+        """Expose state for the lesson logger."""
+        updatable = self.updatable  # type: ignore
+        drawable = self.drawable  # type: ignore
+        asteroids = self.asteroids  # type: ignore
+        shots = self.shots  # type: ignore
+        screen = self.screen  # type: ignore
+
+        log_state()
 
     def _process_events(self) -> bool:
         for event in pygame.event.get():
