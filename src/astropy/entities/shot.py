@@ -15,14 +15,14 @@ class Shot(PhysicsBody):
         super().__init__(x, y, self.SHOT_RADIUS)
 
     def draw(self, screen: pygame.Surface) -> None:
-        """Render the shot as a white outlined circle."""
-        pygame.draw.circle(
-            screen,
-            "green",
-            self.position,
-            self.SHOT_RADIUS,
-            self.LINE_WIDTH,
-        )
+        if self.velocity.length() == 0:
+            return
+
+        direction = self.velocity.normalize()
+        laser_length = 20
+        start = self.position
+        end = self.position + direction * laser_length
+        pygame.draw.line(screen, "green", start, end, 3)
 
     def update(self, dt: float) -> None:
         """Advance shotd position according to velocity and delta time."""

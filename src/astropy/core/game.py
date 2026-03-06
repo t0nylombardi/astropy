@@ -1,4 +1,5 @@
 import sys
+from time import sleep
 from typing import Any
 
 import pygame
@@ -118,6 +119,7 @@ class Game:
 
     def _end_game(self) -> None:
         print("Game over!")
+        sleep(1)
         sys.exit()
 
     def _render(self) -> None:

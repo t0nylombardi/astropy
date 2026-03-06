@@ -9,7 +9,7 @@ from pygame.math import Vector2
 
 from astropy.entities.physics_body import PhysicsBody
 from astropy.logger import log_event
-from astropy.rendering.asteroid_renderer_protocol import AsteroidRendererProtocol
+from astropy.rendering.asteroid.asteroid_renderer_protocol import AsteroidRendererProtocol
 
 RendererFactory = Callable[[int], AsteroidRendererProtocol]
 

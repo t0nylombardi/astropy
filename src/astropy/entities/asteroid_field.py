@@ -9,7 +9,7 @@ from pygame.math import Vector2
 
 from astropy.assets.asteroid_sprites import AsteroidSpriteSheet
 from astropy.entities.asteroid import Asteroid
-from astropy.rendering.asteroid_renderer import AsteroidRenderer
+from astropy.rendering.asteroid.asteroid_renderer import AsteroidRenderer
 
 EdgeFactory = Callable[[float], Vector2]
 Edge = tuple[Vector2, EdgeFactory]
