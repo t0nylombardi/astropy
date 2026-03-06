@@ -45,7 +45,7 @@ class Player(PhysicsBody):
         Args:
             screen: Target pygame surface.
         """
-        self.renderer.draw(screen, self.position)
+        self.renderer.draw(screen, self.position, self.rotation)
 
     def rotate(self, dt: float):
         """Rotate the ship based on elapsed time and turn speed."""
@@ -53,8 +53,12 @@ class Player(PhysicsBody):
 
     def move(self, dt: float) -> None:
         """Move the ship forward or backward along its current heading."""
-        direction = pygame.Vector2(0, 1).rotate(self.rotation)
-        self.position += direction * self.PLAYER_SPEED * dt
+        unit_vector = pygame.Vector2(0, 1)
+
+        rotated_vector = unit_vector.rotate(self.rotation)
+        rotated_with_speed_vector = rotated_vector * self.PLAYER_SPEED * dt
+
+        self.position += rotated_with_speed_vector
 
     def shoot(self) -> None:
         """Create a shot moving in the direction the player is facing."""
@@ -83,4 +87,4 @@ class Player(PhysicsBody):
         if keys[pygame.K_SPACE]:
             self.shoot()
 
-        self.renderer.update(dt)
+        # self.renderer.update(dt)

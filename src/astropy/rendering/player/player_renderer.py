@@ -6,6 +6,8 @@ import pygame
 class PlayerRenderer:
     """Handles visual representation of an player."""
 
+    SPRITE_ROTATION_OFFSET = 90
+
     def __init__(self, sprite: pygame.Surface, radius: int) -> None:
         """Store a scaled player sprite and initialize random rotation and spin."""
         diameter = radius * 2
@@ -15,10 +17,14 @@ class PlayerRenderer:
 
     def update(self, dt: float) -> None:
         """Advance the renderer rotation by elapsed time."""
-        self.rotation += self.spin * dt
+        pass
 
-    def draw(self, screen: pygame.Surface, position: pygame.Vector2) -> None:
-        """Draw the rotated sprite centered at the given world position."""
-        rotated = pygame.transform.rotate(self.image, self.rotation)
+    def draw(
+        self,
+        screen: pygame.Surface,
+        position: pygame.Vector2,
+        rotation: float,
+    ) -> None:
+        rotated = pygame.transform.rotate(self.image, -(rotation + 180))
         rect = rotated.get_rect(center=position)
         screen.blit(rotated, rect)
