@@ -13,11 +13,13 @@ class Player(PhysicsBody):
     PLAYER_TURN_SPEED: ClassVar[int] = 300
     PLAYER_SPEED: ClassVar[int] = 200
     PLAYER_SHOOT_SPEED: ClassVar[int] = 500
+    PLAYER_SHOOT_COOLDOWN_SECONDS: ClassVar[float] = 0.3
 
     def __init__(self, x: float, y: float) -> None:
         """Create a player ship at `(x, y)` with the default facing direction."""
         super().__init__(x, y, self.PLAYER_RADIUS)
         self.rotation: float = 180
+        self.shot_cooldown_timer: float = 0
 
     def triangle(self):
         """Return the three vertices that define the ship polygon."""
@@ -48,6 +50,9 @@ class Player(PhysicsBody):
 
     def shoot(self) -> None:
         """Create a shot moving in the direction the player is facing."""
+        if self.shot_cooldown_timer > 0:
+            return
+        self.shot_cooldown_timer = self.PLAYER_SHOOT_COOLDOWN_SECONDS
         shot = Shot(self.position.x, self.position.y)
 
         direction = pygame.Vector2(0, 1).rotate(self.rotation)
@@ -55,6 +60,8 @@ class Player(PhysicsBody):
 
     def update(self, dt: float) -> None:
         """Read movement keys and apply rotation and translation updates."""
+        self.shot_cooldown_timer -= dt
+
         keys = pygame.key.get_pressed()
 
         if keys[pygame.K_a]:

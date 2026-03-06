@@ -18,7 +18,7 @@ class PhysicsBody(pygame.sprite.Sprite, ABC):
 
         self.position: pygame.Vector2 = pygame.Vector2(x, y)
         self.velocity: pygame.Vector2 = pygame.Vector2(0, 0)
-        self.radius: float = radius
+        self.radius: int = radius
 
     @abstractmethod
     def draw(self, screen: pygame.Surface) -> None:

@@ -62,12 +62,6 @@ class Game:
         while self._process_events():
             dt = self.clock.tick(self.FPS) / 1000.0
 
-            _updatable = self.updatable
-            _drawable = self.drawable
-            _asteroids = self.asteroids
-            _shots = self.shots
-            _screen = self.screen
-
             self._update(dt)
             self._log_state()
             self._render()
@@ -76,11 +70,11 @@ class Game:
 
     def _log_state(self) -> None:
         """Expose state for the lesson logger."""
-        updatable = self.updatable  # type: ignore
-        drawable = self.drawable  # type: ignore
-        asteroids = self.asteroids  # type: ignore
-        shots = self.shots  # type: ignore
-        screen = self.screen  # type: ignore
+        updatable = self.updatable  # type: ignore  # noqa: F841
+        drawable = self.drawable  # type: ignore # noqa: F841
+        asteroids = self.asteroids  # type: ignore # noqa: F841
+        shots = self.shots  # type: ignore # noqa: F841
+        screen = self.screen  # type: ignore # noqa: F841
 
         log_state()
 
@@ -97,10 +91,25 @@ class Game:
     def _update(self, dt: float) -> None:
         self.updatable.update(dt)
 
+        self._handle_player_collisions()
+        self._handle_shot_collisions()
+
+    def _handle_player_collisions(self) -> None:
         if any(asteroid.collides_with(self.player) for asteroid in self.asteroids):
             log_event("player_hit")
-            print("Game over!")
-            sys.exit()
+            self._end_game()
+
+    def _handle_shot_collisions(self) -> None:
+        for asteroid in self.asteroids:
+            for shot in self.shots:
+                if asteroid.collides_with(shot):
+                    log_event("asteroid_shot")
+                    asteroid.split()
+                    shot.kill()
+
+    def _end_game(self) -> None:
+        print("Game over!")
+        sys.exit()
 
     def _render(self) -> None:
         self.screen.fill((0, 0, 0))
