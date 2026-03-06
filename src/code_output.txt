@@ -1,3 +1,48 @@
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/__init__.py ===
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/assets/__init__.py ===
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/assets/asteroid_sprites.py ===
+import random
+
+import pygame
+
+
+class AsteroidSpriteSheet:
+    """Provides asteroid sprites from the sprite sheet."""
+
+    def __init__(self, path: str) -> None:
+        self.sheet = pygame.image.load(path).convert_alpha()
+
+        self.sprites: dict[str, list[pygame.Rect]] = {
+            "large": [
+                pygame.Rect(0, 0, 96, 96),
+                pygame.Rect(96, 0, 96, 96),
+                pygame.Rect(192, 0, 96, 96),
+            ],
+            "medium": [
+                pygame.Rect(0, 96, 64, 64),
+                pygame.Rect(64, 96, 64, 64),
+                pygame.Rect(128, 96, 64, 64),
+            ],
+            "small": [
+                pygame.Rect(0, 160, 32, 32),
+                pygame.Rect(32, 160, 32, 32),
+                pygame.Rect(64, 160, 32, 32),
+            ],
+        }
+
+    def get_random(self, size: str) -> pygame.Surface:
+        rect = random.choice(self.sprites[size])
+
+        surface = pygame.Surface(rect.size, pygame.SRCALPHA)
+        surface.blit(self.sheet, (0, 0), rect)
+
+        return surface
+
+
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/core/__init__.py ===
 
 
@@ -56,7 +101,7 @@ class Game:
         )
 
         AsteroidField.containers = (self.updatable,)
-        Shot.containers = (self.drawable, self.updatable)
+        Shot.containers = (self.shots, self.drawable, self.updatable)
 
     def _create_entities(self) -> None:
         self.player = Player(
@@ -74,11 +119,21 @@ class Game:
         while self._process_events():
             dt = self.clock.tick(self.FPS) / 1000.0
 
-            log_state()
             self._update(dt)
+            self._log_state()
             self._render()
 
         pygame.quit()
+
+    def _log_state(self) -> None:
+        """Expose state for the lesson logger."""
+        updatable = self.updatable  # type: ignore  # noqa: F841
+        drawable = self.drawable  # type: ignore # noqa: F841
+        asteroids = self.asteroids  # type: ignore # noqa: F841
+        shots = self.shots  # type: ignore # noqa: F841
+        screen = self.screen  # type: ignore # noqa: F841
+
+        log_state()
 
     def _process_events(self) -> bool:
         for event in pygame.event.get():
@@ -93,10 +148,25 @@ class Game:
     def _update(self, dt: float) -> None:
         self.updatable.update(dt)
 
+        self._handle_player_collisions()
+        self._handle_shot_collisions()
+
+    def _handle_player_collisions(self) -> None:
         if any(asteroid.collides_with(self.player) for asteroid in self.asteroids):
             log_event("player_hit")
-            print("Game over!")
-            sys.exit()
+            self._end_game()
+
+    def _handle_shot_collisions(self) -> None:
+        for asteroid in self.asteroids:
+            for shot in self.shots:
+                if asteroid.collides_with(shot):
+                    log_event("asteroid_shot")
+                    asteroid.split()
+                    shot.kill()
+
+    def _end_game(self) -> None:
+        print("Game over!")
+        sys.exit()
 
     def _render(self) -> None:
         self.screen.fill((0, 0, 0))
@@ -112,31 +182,66 @@ class Game:
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/asteroid.py ===
+import random
+from typing import ClassVar
+
 import pygame
 
 from astropy.entities.physics_body import PhysicsBody
+from astropy.logger import log_event
+from astropy.rendering.asteroid_renderer_protocol import AsteroidRendererProtocol
 
 
 class Asteroid(PhysicsBody):
-    """A moving asteroid represented as a circular game object."""
+    """Gameplay logic for asteroids."""
 
-    def __init__(self, x: float, y: float, radius: int) -> None:
-        """Initialize an asteroid at `(x, y)` with a given collision radius."""
+    MIN_RADIUS: ClassVar[int] = 20
+    KINDS: ClassVar[int] = 3
+    MAX_RADIUS: ClassVar[int] = MIN_RADIUS * KINDS
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        radius: int,
+        renderer: AsteroidRendererProtocol,
+    ) -> None:
+        """Create a new asteroid with physics and rendering behavior."""
         super().__init__(x, y, radius)
 
+        self.renderer: AsteroidRendererProtocol = renderer
+
     def draw(self, screen: pygame.Surface) -> None:
-        """Render the asteroid as a white outlined circle."""
-        pygame.draw.circle(
-            screen,
-            "white",
-            self.position,
-            self.radius,
-            self.LINE_WIDTH,
-        )
+        """Render the asteroid using its renderer."""
+        self.renderer.draw(screen, self.position)
+
+    def split(self) -> None:
+        """Split asteroid into two smaller asteroids."""
+        self.kill()
+
+        if self.radius <= self.MIN_RADIUS:
+            return
+
+        log_event("asteroid_split")
+
+        angle = random.uniform(20, 50)
+
+        velocity1 = self.velocity.rotate(angle)
+        velocity2 = self.velocity.rotate(-angle)
+
+        new_radius = self.radius - self.MIN_RADIUS
+
+        self._spawn_fragment(velocity1, new_radius)
+        self._spawn_fragment(velocity2, new_radius)
+
+    def _spawn_fragment(self, velocity: pygame.Vector2, radius: int) -> None:
+        asteroid = Asteroid(self.position.x, self.position.y, radius, self.renderer)
+        asteroid.velocity = velocity * 1.2
 
     def update(self, dt: float) -> None:
-        """Advance asteroid position according to velocity and delta time."""
+        """Update asteroid physics and renderer state."""
         self.position += self.velocity * dt
+        self.renderer.update(dt)
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/asteroid_field.py ===
@@ -159,8 +264,6 @@ class AsteroidField(pygame.sprite.Sprite):
     # Domain constants (cohesive to this class)
     ASTEROID_KINDS: ClassVar[int] = 3
     ASTEROID_SPAWN_RATE_SECONDS: ClassVar[float] = 1.5
-    ASTEROID_MIN_RADIUS: ClassVar[int] = 20
-    ASTEROID_MAX_RADIUS: ClassVar[int] = ASTEROID_MIN_RADIUS * ASTEROID_KINDS
 
     containers: ClassVar[tuple[pygame.sprite.AbstractGroup[Any], ...]] = ()
 
@@ -180,16 +283,16 @@ class AsteroidField(pygame.sprite.Sprite):
         )
 
     def _left_edge_spawn(self, y: float) -> Vector2:
-        return Vector2(-self.ASTEROID_MAX_RADIUS, y * self._screen_height)
+        return Vector2(-Asteroid.MAX_RADIUS, y * self._screen_height)
 
     def _right_edge_spawn(self, y: float) -> Vector2:
-        return Vector2(self._screen_width + self.ASTEROID_MAX_RADIUS, y * self._screen_height)
+        return Vector2(self._screen_width + Asteroid.MAX_RADIUS, y * self._screen_height)
 
     def _top_edge_spawn(self, x: float) -> Vector2:
-        return Vector2(x * self._screen_width, -self.ASTEROID_MAX_RADIUS)
+        return Vector2(x * self._screen_width, -Asteroid.MAX_RADIUS)
 
     def _bottom_edge_spawn(self, x: float) -> Vector2:
-        return Vector2(x * self._screen_width, self._screen_height + self.ASTEROID_MAX_RADIUS)
+        return Vector2(x * self._screen_width, self._screen_height + Asteroid.MAX_RADIUS)
 
     def _spawn(self, radius: int, position: Vector2, velocity: Vector2) -> None:
         asteroid = Asteroid(position.x, position.y, radius)
@@ -209,8 +312,8 @@ class AsteroidField(pygame.sprite.Sprite):
         velocity = edge[0] * speed
         velocity = velocity.rotate(random.randint(-30, 30))
         position = edge[1](random.uniform(0, 1))
-        kind = random.randint(1, self.ASTEROID_KINDS)
-        self._spawn(self.ASTEROID_MIN_RADIUS * kind, position, velocity)
+        kind = random.randint(1, Asteroid.KINDS)
+        self._spawn(Asteroid.MIN_RADIUS * kind, position, velocity)
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/physics_body.py ===
@@ -234,7 +337,7 @@ class PhysicsBody(pygame.sprite.Sprite, ABC):
 
         self.position: pygame.Vector2 = pygame.Vector2(x, y)
         self.velocity: pygame.Vector2 = pygame.Vector2(0, 0)
-        self.radius: float = radius
+        self.radius: int = radius
 
     @abstractmethod
     def draw(self, screen: pygame.Surface) -> None:
@@ -267,11 +370,13 @@ class Player(PhysicsBody):
     PLAYER_TURN_SPEED: ClassVar[int] = 300
     PLAYER_SPEED: ClassVar[int] = 200
     PLAYER_SHOOT_SPEED: ClassVar[int] = 500
+    PLAYER_SHOOT_COOLDOWN_SECONDS: ClassVar[float] = 0.3
 
     def __init__(self, x: float, y: float) -> None:
         """Create a player ship at `(x, y)` with the default facing direction."""
         super().__init__(x, y, self.PLAYER_RADIUS)
         self.rotation: float = 180
+        self.shot_cooldown_timer: float = 0
 
     def triangle(self):
         """Return the three vertices that define the ship polygon."""
@@ -302,6 +407,9 @@ class Player(PhysicsBody):
 
     def shoot(self) -> None:
         """Create a shot moving in the direction the player is facing."""
+        if self.shot_cooldown_timer > 0:
+            return
+        self.shot_cooldown_timer = self.PLAYER_SHOOT_COOLDOWN_SECONDS
         shot = Shot(self.position.x, self.position.y)
 
         direction = pygame.Vector2(0, 1).rotate(self.rotation)
@@ -309,6 +417,8 @@ class Player(PhysicsBody):
 
     def update(self, dt: float) -> None:
         """Read movement keys and apply rotation and translation updates."""
+        self.shot_cooldown_timer -= dt
+
         keys = pygame.key.get_pressed()
 
         if keys[pygame.K_a]:
@@ -344,7 +454,7 @@ class Shot(PhysicsBody):
         """Render the shot as a white outlined circle."""
         pygame.draw.circle(
             screen,
-            "red",
+            "green",
             self.position,
             self.SHOT_RADIUS,
             self.LINE_WIDTH,
@@ -507,6 +617,46 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/rendering/__init__.py ===
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/rendering/asteroid_renderer.py ===
+import random
+
+import pygame
+
+
+class AsteroidRenderer:
+    """Handles visual representation of an asteroid."""
+
+    def __init__(self, sprite: pygame.Surface) -> None:
+        self.image = sprite
+        self.rotation = random.uniform(0, 360)
+        self.spin = random.uniform(-50, 50)
+
+    def update(self, dt: float) -> None:
+        self.rotation += self.spin * dt
+
+    def draw(self, screen: pygame.Surface, position: pygame.Vector2) -> None:
+        rotated = pygame.transform.rotate(self.image, self.rotation)
+        rect = rotated.get_rect(center=position)
+        screen.blit(rotated, rect)
+
+
+=== /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/rendering/asteroid_renderer_protocol.py ===
+from typing import Protocol
+
+import pygame
+
+
+class AsteroidRendererProtocol(Protocol):
+    """Interface for asteroid renderers."""
+
+    def draw(self, screen: pygame.Surface, position: pygame.Vector2) -> None: ...  # noqa: D102
+
+    def update(self, dt: float) -> None: ...  # noqa: D102
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/systems/__init__.py ===

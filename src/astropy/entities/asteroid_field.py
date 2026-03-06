@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 from collections.abc import Callable
 from typing import Any, ClassVar
@@ -5,27 +7,42 @@ from typing import Any, ClassVar
 import pygame
 from pygame.math import Vector2
 
+from astropy.assets.asteroid_sprites import AsteroidSpriteSheet
 from astropy.entities.asteroid import Asteroid
+from astropy.rendering.asteroid_renderer import AsteroidRenderer
 
-type EdgeFactory = Callable[[float], Vector2]
-type Edge = tuple[Vector2, EdgeFactory]
+EdgeFactory = Callable[[float], Vector2]
+Edge = tuple[Vector2, EdgeFactory]
 
 
 class AsteroidField(pygame.sprite.Sprite):
-    """Spawner that periodically creates asteroids at random screen edges."""
+    """
+    Spawns asteroids periodically at random edges of the screen.
 
-    # Domain constants (cohesive to this class)
-    ASTEROID_KINDS: ClassVar[int] = 3
+    The field acts as a system responsible for asteroid creation.
+    It determines spawn location, direction, velocity, and visual renderer.
+    """
+
     ASTEROID_SPAWN_RATE_SECONDS: ClassVar[float] = 1.5
+    SPRITES: ClassVar[AsteroidSpriteSheet]
 
     containers: ClassVar[tuple[pygame.sprite.AbstractGroup[Any], ...]] = ()
 
     def __init__(self, screen_width: float, screen_height: float) -> None:
-        """Create an Ateroid fieldn."""
+        """
+        Initialize the asteroid spawning system.
+
+        Args:
+            screen_width: Width of the game screen.
+            screen_height: Height of the game screen.
+        """
         super().__init__(*self.containers)
 
-        self._screen_width = screen_width
-        self._screen_height = screen_height
+        if not hasattr(self.__class__, "SPRITES"):
+            self.__class__.SPRITES = AsteroidSpriteSheet("assets/asteroids.png")
+
+        self._screen_width: float = screen_width
+        self._screen_height: float = screen_height
         self._spawn_timer: float = 0.0
 
         self._edges: tuple[Edge, ...] = (
@@ -36,23 +53,61 @@ class AsteroidField(pygame.sprite.Sprite):
         )
 
     def _left_edge_spawn(self, y: float) -> Vector2:
+        """Return a spawn position on the left edge."""
         return Vector2(-Asteroid.MAX_RADIUS, y * self._screen_height)
 
     def _right_edge_spawn(self, y: float) -> Vector2:
+        """Return a spawn position on the right edge."""
         return Vector2(self._screen_width + Asteroid.MAX_RADIUS, y * self._screen_height)
 
     def _top_edge_spawn(self, x: float) -> Vector2:
+        """Return a spawn position on the top edge."""
         return Vector2(x * self._screen_width, -Asteroid.MAX_RADIUS)
 
     def _bottom_edge_spawn(self, x: float) -> Vector2:
+        """Return a spawn position on the bottom edge."""
         return Vector2(x * self._screen_width, self._screen_height + Asteroid.MAX_RADIUS)
 
+    def _size_from_radius(self, radius: int) -> str:
+        """
+        Map asteroid radius to sprite size.
+
+        Args:
+            radius: Collision radius of the asteroid.
+
+        Returns:
+            The sprite size category.
+        """
+        if radius >= Asteroid.MIN_RADIUS * 3:
+            return "large"
+        if radius >= Asteroid.MIN_RADIUS * 2:
+            return "medium"
+        return "small"
+
     def _spawn(self, radius: int, position: Vector2, velocity: Vector2) -> None:
-        asteroid = Asteroid(position.x, position.y, radius)
+        """
+        Spawn a new asteroid entity.
+
+        Args:
+            radius: Collision radius of the asteroid.
+            position: Spawn position.
+            velocity: Initial movement vector.
+        """
+        size = self._size_from_radius(radius)
+
+        sprite = self.SPRITES.get_random(size)
+        renderer = AsteroidRenderer(sprite)
+
+        asteroid = Asteroid(position.x, position.y, radius, renderer)
         asteroid.velocity = velocity
 
     def update(self, dt: float) -> None:
-        """Spawn a new asteroids at a random."""
+        """
+        Update the spawn timer and create new asteroids when necessary.
+
+        Args:
+            dt: Delta time since last frame.
+        """
         self._spawn_timer += dt
 
         if self._spawn_timer < self.ASTEROID_SPAWN_RATE_SECONDS:
@@ -66,4 +121,5 @@ class AsteroidField(pygame.sprite.Sprite):
         velocity = velocity.rotate(random.randint(-30, 30))
         position = edge[1](random.uniform(0, 1))
         kind = random.randint(1, Asteroid.KINDS)
-        self._spawn(Asteroid.MIN_RADIUS * kind, position, velocity)
+        radius = Asteroid.MIN_RADIUS * kind
+        self._spawn(radius, position, velocity)
