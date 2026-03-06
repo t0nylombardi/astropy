@@ -6,26 +6,26 @@ import pygame
 class AsteroidSpriteSheet:
     """Provides asteroid sprites from the sprite sheet."""
 
+    ROW_HEIGHT = 48
+    ROW_START_Y = 1
+    ROW_COUNT = 12
+    LARGE_RECT = pygame.Rect(29, 0, 80, 48)
+    MEDIUM_RECT = pygame.Rect(145, 0, 24, 32)
+    SMALL_RECT = pygame.Rect(221, 0, 16, 16)
+
     def __init__(self, path: str) -> None:
-        """Load the sprite sheet and define sprite rectangles by asteroid size."""
+        """Load sprite sheet and build asteroid sprite rectangles per size bucket."""
         self.sheet = pygame.image.load(path).convert_alpha()
 
+        row_offsets = [
+            self.ROW_START_Y + self.ROW_HEIGHT * row_index
+            for row_index in range(self.ROW_COUNT)
+        ]
+
         self.sprites: dict[str, list[pygame.Rect]] = {
-            "large": [
-                pygame.Rect(0, 0, 96, 96),
-                pygame.Rect(96, 0, 96, 96),
-                pygame.Rect(192, 0, 96, 96),
-            ],
-            "medium": [
-                pygame.Rect(0, 96, 64, 64),
-                pygame.Rect(64, 96, 64, 64),
-                pygame.Rect(128, 96, 64, 64),
-            ],
-            "small": [
-                pygame.Rect(0, 160, 32, 32),
-                pygame.Rect(32, 160, 32, 32),
-                pygame.Rect(64, 160, 32, 32),
-            ],
+            "large": [self.LARGE_RECT.move(0, y) for y in row_offsets],
+            "medium": [self.MEDIUM_RECT.move(0, y) for y in row_offsets],
+            "small": [self.SMALL_RECT.move(0, y) for y in row_offsets],
         }
 
     def get_random(self, size: str) -> pygame.Surface:

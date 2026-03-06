@@ -6,9 +6,10 @@ import pygame
 class AsteroidRenderer:
     """Handles visual representation of an asteroid."""
 
-    def __init__(self, sprite: pygame.Surface) -> None:
-        """Store the base sprite and initialize random rotation and spin."""
-        self.image = sprite
+    def __init__(self, sprite: pygame.Surface, radius: int) -> None:
+        """Store a scaled asteroid sprite and initialize random rotation and spin."""
+        diameter = radius * 2
+        self.image = pygame.transform.smoothscale(sprite, (diameter, diameter))
         self.rotation = random.uniform(0, 360)
         self.spin = random.uniform(-50, 50)
 
@@ -24,4 +25,8 @@ class AsteroidRenderer:
 
     def clone(self) -> "AsteroidRenderer":
         """Create a renderer copy sharing the same sprite surface."""
-        return AsteroidRenderer(self.image)
+        clone = object.__new__(AsteroidRenderer)
+        clone.image = self.image
+        clone.rotation = random.uniform(0, 360)
+        clone.spin = random.uniform(-50, 50)
+        return clone

@@ -13,28 +13,30 @@ import pygame
 class AsteroidSpriteSheet:
     """Provides asteroid sprites from the sprite sheet."""
 
+    ROW_HEIGHT = 48
+    ROW_START_Y = 1
+    ROW_COUNT = 12
+    LARGE_RECT = pygame.Rect(29, 0, 80, 48)
+    MEDIUM_RECT = pygame.Rect(145, 0, 24, 32)
+    SMALL_RECT = pygame.Rect(221, 0, 16, 16)
+
     def __init__(self, path: str) -> None:
+        """Load sprite sheet and build asteroid sprite rectangles per size bucket."""
         self.sheet = pygame.image.load(path).convert_alpha()
 
+        row_offsets = [
+            self.ROW_START_Y + self.ROW_HEIGHT * row_index
+            for row_index in range(self.ROW_COUNT)
+        ]
+
         self.sprites: dict[str, list[pygame.Rect]] = {
-            "large": [
-                pygame.Rect(0, 0, 96, 96),
-                pygame.Rect(96, 0, 96, 96),
-                pygame.Rect(192, 0, 96, 96),
-            ],
-            "medium": [
-                pygame.Rect(0, 96, 64, 64),
-                pygame.Rect(64, 96, 64, 64),
-                pygame.Rect(128, 96, 64, 64),
-            ],
-            "small": [
-                pygame.Rect(0, 160, 32, 32),
-                pygame.Rect(32, 160, 32, 32),
-                pygame.Rect(64, 160, 32, 32),
-            ],
+            "large": [self.LARGE_RECT.move(0, y) for y in row_offsets],
+            "medium": [self.MEDIUM_RECT.move(0, y) for y in row_offsets],
+            "small": [self.SMALL_RECT.move(0, y) for y in row_offsets],
         }
 
     def get_random(self, size: str) -> pygame.Surface:
+        """Return a random sprite surface for the requested asteroid size."""
         rect = random.choice(self.sprites[size])
 
         surface = pygame.Surface(rect.size, pygame.SRCALPHA)
@@ -157,12 +159,21 @@ class Game:
             self._end_game()
 
     def _handle_shot_collisions(self) -> None:
-        for asteroid in self.asteroids:
-            for shot in self.shots:
+        # Iterate over snapshots so spawning/killing during collision handling
+        # does not cause the same shot to chain through fresh fragments.
+        for shot in list(self.shots):
+            if not shot.alive():
+                continue
+
+            for asteroid in list(self.asteroids):
+                if not asteroid.alive():
+                    continue
+
                 if asteroid.collides_with(shot):
                     log_event("asteroid_shot")
                     asteroid.split()
                     shot.kill()
+                    break
 
     def _end_game(self) -> None:
         print("Game over!")
@@ -182,18 +193,29 @@ class Game:
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/asteroid.py ===
+from __future__ import annotations
+
 import random
+from collections.abc import Callable
 from typing import ClassVar
 
 import pygame
+from pygame.math import Vector2
 
 from astropy.entities.physics_body import PhysicsBody
 from astropy.logger import log_event
 from astropy.rendering.asteroid_renderer_protocol import AsteroidRendererProtocol
 
+RendererFactory = Callable[[int], AsteroidRendererProtocol]
+
 
 class Asteroid(PhysicsBody):
-    """Gameplay logic for asteroids."""
+    """
+    Represents an asteroid entity with physics behavior and pluggable rendering.
+
+    Asteroids can split into smaller fragments when destroyed unless they
+    are already at the minimum size.
+    """
 
     MIN_RADIUS: ClassVar[int] = 20
     KINDS: ClassVar[int] = 3
@@ -205,18 +227,42 @@ class Asteroid(PhysicsBody):
         y: float,
         radius: int,
         renderer: AsteroidRendererProtocol,
+        renderer_factory: RendererFactory | None = None,
     ) -> None:
-        """Create a new asteroid with physics and rendering behavior."""
+        """
+        Create a new asteroid.
+
+        Args:
+            x: Initial X position.
+            y: Initial Y position.
+            radius: Collision radius of the asteroid.
+            renderer: Rendering strategy responsible for drawing the asteroid.
+            renderer_factory: Creates a renderer for a given asteroid radius.
+        """
         super().__init__(x, y, radius)
 
         self.renderer: AsteroidRendererProtocol = renderer
+        if renderer_factory is None:
+            self._renderer_factory: RendererFactory = lambda _radius: self.renderer.clone()
+        else:
+            self._renderer_factory = renderer_factory
 
     def draw(self, screen: pygame.Surface) -> None:
-        """Render the asteroid using its renderer."""
+        """
+        Draw the asteroid using its renderer.
+
+        Args:
+            screen: Target pygame surface.
+        """
         self.renderer.draw(screen, self.position)
 
     def split(self) -> None:
-        """Split asteroid into two smaller asteroids."""
+        """
+        Destroy the asteroid and spawn smaller fragments if possible.
+
+        Larger asteroids split into two fragments with slightly diverging
+        velocities to simulate an explosion effect.
+        """
         self.kill()
 
         if self.radius <= self.MIN_RADIUS:
@@ -234,17 +280,40 @@ class Asteroid(PhysicsBody):
         self._spawn_fragment(velocity1, new_radius)
         self._spawn_fragment(velocity2, new_radius)
 
-    def _spawn_fragment(self, velocity: pygame.Vector2, radius: int) -> None:
-        asteroid = Asteroid(self.position.x, self.position.y, radius, self.renderer)
+    def _spawn_fragment(self, velocity: Vector2, radius: int) -> None:
+        """
+        Spawn a fragment asteroid after a split.
+
+        Args:
+            velocity: Velocity vector for the fragment.
+            radius: Radius of the new asteroid.
+        """
+        renderer = self._renderer_factory(radius)
+
+        asteroid = Asteroid(
+            self.position.x,
+            self.position.y,
+            radius,
+            renderer,
+            self._renderer_factory,
+        )
+
         asteroid.velocity = velocity * 1.2
 
     def update(self, dt: float) -> None:
-        """Update asteroid physics and renderer state."""
+        """
+        Update asteroid physics and renderer animation.
+
+        Args:
+            dt: Delta time since the previous frame.
+        """
         self.position += self.velocity * dt
         self.renderer.update(dt)
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/asteroid_field.py ===
+from __future__ import annotations
+
 import random
 from collections.abc import Callable
 from typing import Any, ClassVar
@@ -252,27 +321,42 @@ from typing import Any, ClassVar
 import pygame
 from pygame.math import Vector2
 
+from astropy.assets.asteroid_sprites import AsteroidSpriteSheet
 from astropy.entities.asteroid import Asteroid
+from astropy.rendering.asteroid_renderer import AsteroidRenderer
 
-type EdgeFactory = Callable[[float], Vector2]
-type Edge = tuple[Vector2, EdgeFactory]
+EdgeFactory = Callable[[float], Vector2]
+Edge = tuple[Vector2, EdgeFactory]
 
 
 class AsteroidField(pygame.sprite.Sprite):
-    """Spawner that periodically creates asteroids at random screen edges."""
+    """
+    Spawns asteroids periodically at random edges of the screen.
 
-    # Domain constants (cohesive to this class)
-    ASTEROID_KINDS: ClassVar[int] = 3
+    The field acts as a system responsible for asteroid creation.
+    It determines spawn location, direction, velocity, and visual renderer.
+    """
+
     ASTEROID_SPAWN_RATE_SECONDS: ClassVar[float] = 1.5
+    SPRITES: ClassVar[AsteroidSpriteSheet]
 
     containers: ClassVar[tuple[pygame.sprite.AbstractGroup[Any], ...]] = ()
 
     def __init__(self, screen_width: float, screen_height: float) -> None:
-        """Create an Ateroid fieldn."""
+        """
+        Initialize the asteroid spawning system.
+
+        Args:
+            screen_width: Width of the game screen.
+            screen_height: Height of the game screen.
+        """
         super().__init__(*self.containers)
 
-        self._screen_width = screen_width
-        self._screen_height = screen_height
+        if not hasattr(self.__class__, "SPRITES"):
+            self.__class__.SPRITES = AsteroidSpriteSheet("assets/asteroids.png")
+
+        self._screen_width: float = screen_width
+        self._screen_height: float = screen_height
         self._spawn_timer: float = 0.0
 
         self._edges: tuple[Edge, ...] = (
@@ -283,23 +367,69 @@ class AsteroidField(pygame.sprite.Sprite):
         )
 
     def _left_edge_spawn(self, y: float) -> Vector2:
+        """Return a spawn position on the left edge."""
         return Vector2(-Asteroid.MAX_RADIUS, y * self._screen_height)
 
     def _right_edge_spawn(self, y: float) -> Vector2:
+        """Return a spawn position on the right edge."""
         return Vector2(self._screen_width + Asteroid.MAX_RADIUS, y * self._screen_height)
 
     def _top_edge_spawn(self, x: float) -> Vector2:
+        """Return a spawn position on the top edge."""
         return Vector2(x * self._screen_width, -Asteroid.MAX_RADIUS)
 
     def _bottom_edge_spawn(self, x: float) -> Vector2:
+        """Return a spawn position on the bottom edge."""
         return Vector2(x * self._screen_width, self._screen_height + Asteroid.MAX_RADIUS)
 
+    def _size_from_radius(self, radius: int) -> str:
+        """
+        Map asteroid radius to sprite size.
+
+        Args:
+            radius: Collision radius of the asteroid.
+
+        Returns:
+            The sprite size category.
+        """
+        if radius >= Asteroid.MIN_RADIUS * 3:
+            return "large"
+        if radius >= Asteroid.MIN_RADIUS * 2:
+            return "medium"
+        return "small"
+
+    def _renderer_for_radius(self, radius: int) -> AsteroidRenderer:
+        """Build a renderer using a random sprite matching the asteroid radius."""
+        size = self._size_from_radius(radius)
+        sprite = self.SPRITES.get_random(size)
+        return AsteroidRenderer(sprite, radius)
+
     def _spawn(self, radius: int, position: Vector2, velocity: Vector2) -> None:
-        asteroid = Asteroid(position.x, position.y, radius)
+        """
+        Spawn a new asteroid entity.
+
+        Args:
+            radius: Collision radius of the asteroid.
+            position: Spawn position.
+            velocity: Initial movement vector.
+        """
+        renderer = self._renderer_for_radius(radius)
+        asteroid = Asteroid(
+            position.x,
+            position.y,
+            radius,
+            renderer,
+            self._renderer_for_radius,
+        )
         asteroid.velocity = velocity
 
     def update(self, dt: float) -> None:
-        """Spawn a new asteroids at a random."""
+        """
+        Update the spawn timer and create new asteroids when necessary.
+
+        Args:
+            dt: Delta time since last frame.
+        """
         self._spawn_timer += dt
 
         if self._spawn_timer < self.ASTEROID_SPAWN_RATE_SECONDS:
@@ -313,7 +443,8 @@ class AsteroidField(pygame.sprite.Sprite):
         velocity = velocity.rotate(random.randint(-30, 30))
         position = edge[1](random.uniform(0, 1))
         kind = random.randint(1, Asteroid.KINDS)
-        self._spawn(Asteroid.MIN_RADIUS * kind, position, velocity)
+        radius = Asteroid.MIN_RADIUS * kind
+        self._spawn(radius, position, velocity)
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/entities/physics_body.py ===
@@ -631,32 +762,64 @@ import pygame
 class AsteroidRenderer:
     """Handles visual representation of an asteroid."""
 
-    def __init__(self, sprite: pygame.Surface) -> None:
-        self.image = sprite
+    def __init__(self, sprite: pygame.Surface, radius: int) -> None:
+        """Store a scaled asteroid sprite and initialize random rotation and spin."""
+        diameter = radius * 2
+        self.image = pygame.transform.smoothscale(sprite, (diameter, diameter))
         self.rotation = random.uniform(0, 360)
         self.spin = random.uniform(-50, 50)
 
     def update(self, dt: float) -> None:
+        """Advance the renderer rotation by elapsed time."""
         self.rotation += self.spin * dt
 
     def draw(self, screen: pygame.Surface, position: pygame.Vector2) -> None:
+        """Draw the rotated sprite centered at the given world position."""
         rotated = pygame.transform.rotate(self.image, self.rotation)
         rect = rotated.get_rect(center=position)
         screen.blit(rotated, rect)
 
+    def clone(self) -> "AsteroidRenderer":
+        """Create a renderer copy sharing the same sprite surface."""
+        clone = object.__new__(AsteroidRenderer)
+        clone.image = self.image
+        clone.rotation = random.uniform(0, 360)
+        clone.spin = random.uniform(-50, 50)
+        return clone
+
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/rendering/asteroid_renderer_protocol.py ===
+from __future__ import annotations
+
 from typing import Protocol
 
 import pygame
+from pygame.math import Vector2
 
 
 class AsteroidRendererProtocol(Protocol):
-    """Interface for asteroid renderers."""
+    """
+    Interface for asteroid rendering strategies.
 
-    def draw(self, screen: pygame.Surface, position: pygame.Vector2) -> None: ...  # noqa: D102
+    Implementations are responsible for drawing the asteroid and
+    updating any visual animation state such as rotation.
+    """
 
-    def update(self, dt: float) -> None: ...  # noqa: D102
+    def draw(self, screen: pygame.Surface, position: Vector2) -> None:
+        """Render the asteroid at the given position."""
+        ...
+
+    def update(self, dt: float) -> None:
+        """Update animation state."""
+        ...
+
+    def clone(self) -> AsteroidRendererProtocol:
+        """
+        Return a new renderer instance for asteroid fragments.
+
+        Splitting asteroids must not share renderer state.
+        """
+        ...
 
 
 === /Users/sic/dev/t0nylombardi/python/astropy/src/astropy/systems/__init__.py ===

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 from typing import ClassVar
 
 import pygame
@@ -9,6 +10,8 @@ from pygame.math import Vector2
 from astropy.entities.physics_body import PhysicsBody
 from astropy.logger import log_event
 from astropy.rendering.asteroid_renderer_protocol import AsteroidRendererProtocol
+
+RendererFactory = Callable[[int], AsteroidRendererProtocol]
 
 
 class Asteroid(PhysicsBody):
@@ -29,6 +32,7 @@ class Asteroid(PhysicsBody):
         y: float,
         radius: int,
         renderer: AsteroidRendererProtocol,
+        renderer_factory: RendererFactory | None = None,
     ) -> None:
         """
         Create a new asteroid.
@@ -38,10 +42,15 @@ class Asteroid(PhysicsBody):
             y: Initial Y position.
             radius: Collision radius of the asteroid.
             renderer: Rendering strategy responsible for drawing the asteroid.
+            renderer_factory: Creates a renderer for a given asteroid radius.
         """
         super().__init__(x, y, radius)
 
         self.renderer: AsteroidRendererProtocol = renderer
+        if renderer_factory is None:
+            self._renderer_factory: RendererFactory = lambda _radius: self.renderer.clone()
+        else:
+            self._renderer_factory = renderer_factory
 
     def draw(self, screen: pygame.Surface) -> None:
         """
@@ -84,13 +93,14 @@ class Asteroid(PhysicsBody):
             velocity: Velocity vector for the fragment.
             radius: Radius of the new asteroid.
         """
-        renderer = self.renderer.clone()
+        renderer = self._renderer_factory(radius)
 
         asteroid = Asteroid(
             self.position.x,
             self.position.y,
             radius,
             renderer,
+            self._renderer_factory,
         )
 
         asteroid.velocity = velocity * 1.2

@@ -100,12 +100,21 @@ class Game:
             self._end_game()
 
     def _handle_shot_collisions(self) -> None:
-        for asteroid in self.asteroids:
-            for shot in self.shots:
+        # Iterate over snapshots so spawning/killing during collision handling
+        # does not cause the same shot to chain through fresh fragments.
+        for shot in list(self.shots):
+            if not shot.alive():
+                continue
+
+            for asteroid in list(self.asteroids):
+                if not asteroid.alive():
+                    continue
+
                 if asteroid.collides_with(shot):
                     log_event("asteroid_shot")
                     asteroid.split()
                     shot.kill()
+                    break
 
     def _end_game(self) -> None:
         print("Game over!")

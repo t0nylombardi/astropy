@@ -84,6 +84,12 @@ class AsteroidField(pygame.sprite.Sprite):
             return "medium"
         return "small"
 
+    def _renderer_for_radius(self, radius: int) -> AsteroidRenderer:
+        """Build a renderer using a random sprite matching the asteroid radius."""
+        size = self._size_from_radius(radius)
+        sprite = self.SPRITES.get_random(size)
+        return AsteroidRenderer(sprite, radius)
+
     def _spawn(self, radius: int, position: Vector2, velocity: Vector2) -> None:
         """
         Spawn a new asteroid entity.
@@ -93,12 +99,14 @@ class AsteroidField(pygame.sprite.Sprite):
             position: Spawn position.
             velocity: Initial movement vector.
         """
-        size = self._size_from_radius(radius)
-
-        sprite = self.SPRITES.get_random(size)
-        renderer = AsteroidRenderer(sprite)
-
-        asteroid = Asteroid(position.x, position.y, radius, renderer)
+        renderer = self._renderer_for_radius(radius)
+        asteroid = Asteroid(
+            position.x,
+            position.y,
+            radius,
+            renderer,
+            self._renderer_for_radius,
+        )
         asteroid.velocity = velocity
 
     def update(self, dt: float) -> None:
