@@ -15,6 +15,7 @@ class Shot(PhysicsBody):
         super().__init__(x, y, self.SHOT_RADIUS)
 
     def draw(self, screen: pygame.Surface) -> None:
+        """Draw the shot as a short line segment in its velocity direction."""
         if self.velocity.length() == 0:
             return
 

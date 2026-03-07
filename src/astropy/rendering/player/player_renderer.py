@@ -25,6 +25,7 @@ class PlayerRenderer:
         position: pygame.Vector2,
         rotation: float,
     ) -> None:
+        """Rotate the cached sprite and draw it centered on `position`."""
         rotated = pygame.transform.rotate(self.image, -(rotation + 180))
         rect = rotated.get_rect(center=position)
         screen.blit(rotated, rect)
